@@ -8,14 +8,7 @@ jmp start
 pcb:          times 32*16 dw 0        ; space for 32 PCBs 
 stack:        times 32*256 dw 0       ; space for 32 512 byte stacks 
 nextpcb:      dw   1                  ; index of next free pcb 
-current:      dw   0                  ; index of current pcb
-oldtimer: dd 0
-BallFallCounter: dw 0
-FirstInitDone: db 0
-
-BallRow1Base: dw 204
-BallRow2Base: dw 364
-BallRow3Base: dw 524
+current:      dw   0                  ; index of current pcb 
 
 PaddleL: dw 3758
 PaddleM: dw 3760
@@ -221,9 +214,6 @@ ClearScreen:
     push bp
     mov bp, sp
 
-    mov ax, 0xb800
-    mov es, ax
-
     mov ah, 0x07
     mov al, 0x20
 
@@ -302,16 +292,9 @@ DrawBalls:
     push bp
     mov bp, sp
 
-    mov ax, 0xb800
-    mov es, ax
-
     mov ax, [MaxBallCounter]
     mov word [CurrentBallsCounter], ax
     xor ax, ax
-
-    mov word [BallRow1Base], 204
-    mov word [BallRow2Base], 364
-    mov word [BallRow3Base], 524
 
     mov cx, 3
     mov ax, [CurrentBallsCounter]
@@ -351,7 +334,8 @@ DrawBalls:
 
         ;shr dx, 1 
 
-        mov cx, 0x074F
+        mov ch, 0x07
+        mov cl, 'O'
 
         cmp word [es:di], cx
         pop ax
@@ -394,7 +378,8 @@ DrawBalls:
 
             ;shr dx, 1 
 
-            mov cx, 0x074F
+            mov ch, 0x07
+            mov cl, 'O'
 
             cmp word [es:di], cx
             pop ax
@@ -439,7 +424,8 @@ DrawBalls:
 
             ;shr dx, 1 
 
-            mov cx, 0x074F
+            mov ch, 0x07
+            mov cl, 'O'
 
             cmp word [es:di], cx
             pop ax
@@ -529,430 +515,197 @@ ClearAllBullets:
         pop bp
         ret
 
-PaddleTask:
-
-    push cs
-    pop ds
+start:
 
     mov ax, 0xb800
     mov es, ax
-    
-PaddleLoop:
-    mov ah, 0x01
-    int 0x16
-    jz PaddleLoop  ; no key pressed, keep checking
-    
-    mov ah, 0
-    int 0x16
-    
-    cmp ah, 0x4B  ; left arrow
-    je PaddleLeft
-    
-    cmp ah, 0x4D  ; right arrow
-    je PaddleRight
 
-    cmp ah, 0x48  ; up arrow to shoot
-    je PaddleShoot
-    
-    jmp PaddleLoop
+    mov word[PaddleL], 3758
+    mov word[PaddleM], 3760
+    mov word[PaddleR], 3762
 
-PaddleShoot:
-    mov cx, [MaxBullets]
-    mov bx, 0
-
-    FindSlotTask:
-        mov ax, 2
-        mul bx
-        mov si, ax
-
-        mov dx, [IsBulletActive + si]
-        cmp dx, 0
-        je ActivateBulletTask
-        inc bx
-        loop FindSlotTask
-        jmp PaddleLoop
-
-    ActivateBulletTask:
-        mov di, [PaddleM]
-        sub di, 160
-        mov [BulletPos + si], di
-
-        mov ah, 0x03
-        mov al, '|'
-        mov [es:di], ax
-
-        mov word [IsBulletActive + si], 1
-        jmp PaddleLoop
-    
-PaddleLeft:
-    mov bx, [PaddleL]
-    cmp bx, 3722
-    jle PaddleLoop
-    
-    call ErasePaddle
-    sub word [PaddleL], 2
-    sub word [PaddleM], 2
-    sub word [PaddleR], 2
-    call DrawPaddle
-    jmp PaddleLoop
-    
-PaddleRight:
-    mov bx, [PaddleR]
-    cmp bx, 3798
-    jge PaddleLoop
-    
-    call ErasePaddle
-    add word [PaddleR], 2
-    add word [PaddleM], 2
-    add word [PaddleL], 2
-    call DrawPaddle
-    jmp PaddleLoop
-
-BulletTask:
-
-    push cs
-    pop ds
-
-    mov ax, 0xb800
-    mov es, ax
-    
-BulletLoop:
-    mov cx, [MaxBullets]
-    mov bx, 0
-    
-BulletCheck:
-    mov ax, 2
-    mul bx
-    mov si, ax
-    
-    mov dx, [IsBulletActive + si]
-    cmp dx, 1
-    jne NextBulletTask
-    
-    mov di, [BulletPos + si]
-    mov word [es:di], 0x0720
-    sub di, 160
-    
-    cmp di, 160
-    jl DeactivateBulletTask
-    
-    mov ax, [es:di]
-    cmp al, 'O'
-    je EraseTargetTask
-    
-    mov ah, 0x03
-    mov al, '|'
-    mov [es:di], ax
-    mov [BulletPos + si], di
-    jmp NextBulletTask
-    
-EraseTargetTask:
-    mov word [es:di], 0x0720
-    mov word [IsBulletActive + si], 0
-    dec word [CurrentBallsCounter]
-    inc byte [Score]
-    jmp NextBulletTask
-    
-DeactivateBulletTask:
-    mov word [IsBulletActive + si], 0
-    
-NextBulletTask:
-    inc bx
-    loop BulletCheck
-    
-    ; Small delay
-    push cx
-    mov cx, 0xFFFF
-
-    delay_bullet:
-        loop delay_bullet
-
-    pop cx
-    
-    jmp BulletLoop
-
-
-MoveBalls1RowDown:
-    ; let's start from the third row
-    push bp
-    mov bp, sp
-
-    xor ax, ax
-    mov ax, 0xb800
-    mov es, ax
-
-    mov di, [BallRow3Base]
-    mov si, di
-    add si, 74
-
-    Checker1:
-
-        cmp di, si
-        jge Checker2
-
-        mov ax, [es:di]
-        cmp al, 'O'
-        je MoveBallDown
-
-        add di, 2
-        jmp Checker1
-
-        MoveBallDown:
-
-            mov bx, di
-            add bx, 160
-
-            ; Check collision with paddle
-            cmp bx, [PaddleL]
-            je near BallHitPaddle
-            cmp bx, [PaddleM]
-            je near BallHitPaddle
-            cmp bx, [PaddleR]
-            je near BallHitPaddle
-
-            mov word[es:di], 0x0720         ; space
-            mov word[es:bx], 0x074F
-            add di, 2
-            jmp Checker1
-
-    Checker2:
-        ; second row
-        mov di, [BallRow2Base]
-        mov si, di
-        add si, 74
-
-        InnerChecker2:
-
-            cmp di, si     ;   again 400 = random
-            jge Checker3
-
-            mov ax, [es:di]
-            cmp al, 'O'
-            je MoveBallDown1
-
-            add di, 2
-            jmp InnerChecker2
-
-            MoveBallDown1:
-                mov bx, di
-                add bx, 160
-
-                ; Check collision with paddle
-                cmp bx, [PaddleL]
-                je BallHitPaddle
-                cmp bx, [PaddleM]
-                je BallHitPaddle
-                cmp bx, [PaddleR]
-                je BallHitPaddle
-
-                mov word[es:di], 0x0720         ; space
-                mov word[es:bx], 0x074F
-                add di, 2
-                jmp InnerChecker2
-
-    Checker3:
-
-        mov di, [BallRow1Base]
-        mov si, di
-        add si, 74
-
-        InnerChecker3:
-
-            cmp di, si     ;   again 400 = random
-            jge done5
-
-            mov ax, [es:di]
-            cmp al, 'O'
-            je MoveBallDown2
-
-            add di, 2
-            jmp InnerChecker3
-
-            MoveBallDown2:
-                mov bx, di
-                add bx, 160
-
-                ; Check collision with paddle
-                cmp bx, [PaddleL]
-                je BallHitPaddle
-                cmp bx, [PaddleM]
-                je BallHitPaddle
-                cmp bx, [PaddleR]
-                je BallHitPaddle
-
-                mov word[es:di], 0x0720         ; space
-                mov word[es:bx], 0x074F
-
-                add di, 2
-                jmp InnerChecker3
-
-
-    done5:
-        add word [BallRow1Base], 160
-        add word [BallRow2Base], 160
-        add word [BallRow3Base], 160
-
-        pop bp
-        ret
-
-BallHitPaddle:
-    ; Here we handle "loss".
-    ; For now, you said: show winning screen to test.
-
-    ; Optional: clear bullets / balls etc.
-    call ClearAllBullets
-
-    ; Temporarily reuse winning message function
-    call ShowWinningMessage
-    call PrintScore
-
-    ; Stop the game loop by jumping to WaitForRestart logic
-    ; You already have this in 'start' section:
-
-    ; WaitForRestart:
-    ;   mov ah, 0
-    ;   int 0x16
-    ;   cmp al, 13
-    ;   je start
-    ;   cmp al, 27
-    ;   je Exit
-    ;   jmp WaitForRestart
-
-    jmp WaitForRestart  ; make sure this label is global / accessible
-
-ResetGameState:
-    ; Critical section: do not let timer + tasks run during reset
-    cli
-
-    ; reset vars
-    mov word [BallRow1Base], 204
-    mov word [BallRow2Base], 364
-    mov word [BallRow3Base], 524
-
-    mov word [PaddleL], 3758
-    mov word [PaddleM], 3760
-    mov word [PaddleR], 3762
-
-    mov byte [Score], 0
-    mov word [BallFallCounter], 0
-    mov word [CurrentBallsCounter], 0
+    mov byte[Score], 0
 
     call ClearScreen
     call SetupUI
-
-    mov ax, 0xb800
-    mov es, ax
-
-    call ClearAllBullets
     call DrawPaddle
     call DrawBalls
 
-    sti       ; re-enable interrupts / scheduler
+    GameLoop:
 
-    ret
+        call PrintScore
 
-SetupInterruptsAndTasks:
-    ; Hook timer interrupt and init threads with interrupts OFF
-    xor ax, ax
-    mov es, ax
-    mov ax, [es:8*4]
-    mov [oldtimer], ax
-    mov ax, [es:8*4+2]
-    mov [oldtimer+2], ax
+        mov cx, [MaxBullets]
+        mov bx, 0
 
-    cli                              ; disable interrupts for whole setup
+        HandleBullets:
+            mov ax, 2
+            mul bx
+            mov si, ax
 
-    mov word [es:8*4], timer
-    mov [es:8*4+2], cs
+            mov dx, [IsBulletActive + si]
+            cmp dx, 1
+            je SimulateBullet
+            jmp NextBullet
 
-    mov ax, 0xb800
-    mov es, ax
+        SimulateBullet:
 
-    ; Create PaddleTask thread
-    push cs
-    push word PaddleTask
-    push word 0
-    call initpcb
+            mov di, [BulletPos + si]
 
-    ; Create BulletTask thread
-    push cs
-    push word BulletTask
-    push word 0
-    call initpcb
+            mov word [es:di], 0x0720
+            sub di, 160
 
-    sti                              ; now everything is ready, enable ints
-    ret
+            cmp di, 160
+            jl DeactivateBullet
+            mov ax, [es:di]
+            
+            cmp al, 'O'
+            je EraseTarget
 
-start:
-    cmp byte [FirstInitDone], 1
-    je OnlyResetGame
+            mov ah, 0x03
+            mov al, '|'
 
-    ; First time only
-    mov byte [FirstInitDone], 1
-    call ResetGameState
-    call SetupInterruptsAndTasks
+            mov [es:di], ax
 
-    jmp GameLoop
 
-OnlyResetGame:
-    call ResetGameState
-    jmp GameLoop
+            mov [BulletPos + si], di
+            jmp NextBullet
+            
 
-GameLoop:
-    call PrintScore
+            EraseTarget:
+                mov word [es:di], 0x0720
+                mov word[IsBulletActive + si], 0
 
-    inc word [BallFallCounter]
-    cmp word [BallFallCounter], 50
-    jb SkipFall
+                dec word [CurrentBallsCounter]
+                mov dx, [CurrentBallsCounter]
+                cmp dx, 0
 
-    mov word [BallFallCounter], 0
-    call MoveBalls1RowDown
+                inc byte[Score]
 
-SkipFall:
-    mov dx, [CurrentBallsCounter]
-    cmp dx, 0
-    je ShowWinning
+                cmp dx, 0
+                je CheckWin
+                jmp DeactivateBullet
+
+                CheckWin:
+                    jmp ShowWinning
+
+            DeactivateBullet:
+
+                mov word [IsBulletActive + si], 0
+
+
+            NextBullet:
+                inc bx
+                loop HandleBullets
+        
+        
+
+        Continue:
+
+            mov cx, 0xFFFF
+            delay_loop:
+                loop delay_loop
+
+            mov ah, 0x01
+            int 0x16
+            jz GameLoop
+
+            mov ah, 0
+            int 0x16
+
+            cmp al, 27
+            je near Exit
+
+            cmp ah, 0x4B
+            je MoveLeft
+
+            cmp ah, 0x4D
+            je MoveRight
+
+            cmp ah, 0x48
+            je Shoot
+
+            jmp GameLoop
+
+            MoveLeft:
+                mov bx, [PaddleL]
+                cmp bx, 3722
+                jle GameLoop
+
+                call ErasePaddle
+
+                sub word [PaddleL], 2
+                sub word [PaddleM], 2
+                sub word [PaddleR], 2
+
+                call DrawPaddle
+                jmp GameLoop
+
+            MoveRight:
+                mov bx, [PaddleR]
+                cmp bx, 3798
+                jge GameLoop
+
+                call ErasePaddle
+
+                add word [PaddleR], 2
+                add word [PaddleM], 2
+                add word [PaddleL], 2
+                
+                call DrawPaddle
+                jmp GameLoop
+
+            Shoot:
+
+                mov cx, [MaxBullets]
+                mov bx, 0
+
+                FindSlot:
+                    mov ax, 2
+                    mul bx
+                    mov si, bx
+
+                    mov dx, [IsBulletActive + si]
+                    cmp dx, 0
+                    je ActivateBullet
+                    inc bx
+                    loop FindSlot
+
+                    jmp GameLoop
+
+                ActivateBullet:
+
+                    mov ax, 2
+                    mul bx
+                    mov si, ax
+
+                    mov di, [PaddleM]
+                    sub di, 160
+                    mov [BulletPos + si], di
+
+                    mov ah, 0x03
+                    mov al, '|'
+                    mov [es:di], ax
+
+                    mov word [IsBulletActive + si], 1
+                    jmp GameLoop               
+
     
-    push cx
-    mov cx, 0x1FFF
-MainDelay:
-    loop MainDelay
-    pop cx
-    
-    jmp GameLoop
+    ShowWinning:
+        call ClearAllBullets
+        call ShowWinningMessage
+        call PrintScore
 
-ShowWinning:
-    call ClearAllBullets
-    call ShowWinningMessage
-    call PrintScore
+        mov ah, 0
+        int 0x16
+        cmp al, 13
+        je start
 
-WaitForRestart:
-    mov ah, 0
-    int 0x16
-    cmp al, 13
-    je RestartGame
+        cmp al, 27
+        je Exit
 
-    cmp al, 27
-    je Exit
+        jmp ShowWinning
 
-    jmp WaitForRestart
-
-RestartGame:
-    cli
-    call ResetGameState
-    sti
-    jmp GameLoop
-
-Exit:
-    ; Restore old timer interrupt
-    xor ax, ax
-    mov es, ax
-    cli
-    mov ax, [oldtimer]
-    mov [es:8*4], ax
-    mov ax, [oldtimer+2]
-    mov [es:8*4+2], ax
-    sti
-    
-    mov ax, 0x4c00
-    int 0x21
+    Exit:
+        mov ax, 0x4c00
+        int 0x21
