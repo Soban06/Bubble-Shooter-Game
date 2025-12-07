@@ -25,6 +25,7 @@ IsBulletActive: dw 0, 0, 0, 0, 0, 0, 0, 0, 0, 0
 MaxBullets: dw 10
 
 YouWonTheGameText: db 'Congratulations! You just won the game!', 0
+YouLostTheGameText: db 'You just lost the game :(', 0
 PressEnterToRestartText: db 'Press [Enter] To Restart!', 0
 
 Score: db 0
@@ -33,9 +34,7 @@ ScoreText: db 'Score: ', 0
 MaxBallCounter: dw 60
 CurrentBallsCounter: dw 0
 
-PlayerMovement:
-    
- 
+
 timer:
 
     push ds 
@@ -256,11 +255,24 @@ SetupUI:
         mov di, 200
         mov cx, 25
     rightColumn:
-        jcxz done
+        jcxz bottom
         mov [es:di], ax
         add di, 160
         dec cx
         jmp rightColumn
+
+    bottom:
+
+        mov di, 3882
+        mov cx, 39
+        mov ah, 0x0C
+        mov al, 0xDC
+        bottomloop:
+            jcxz done
+            mov [es:di], ax
+            add di, 2
+            dec cx
+            jmp bottomloop
 
     done:
         call PrintScore
@@ -493,6 +505,28 @@ ShowWinningMessage:
         pop bp
         ret
 
+ShowLosingMessage:
+    push bp
+    mov bp, sp
+
+    xor ax, ax
+    mov ah, 0x0C
+
+    mov si, YouLostTheGameText
+    mov di, 1814
+    l4:
+        lodsb
+        cmp al, 0
+        je done6
+        stosw
+        jmp l4
+
+
+    done6:
+        call ShowPressEnterToRestart
+        pop bp
+        ret
+
 ClearAllBullets:
     push bp
     mov bp, sp
@@ -550,6 +584,9 @@ MoveBalls1RowDown:
 
             mov bx, di
             add bx, 160
+            
+            mov word[es:di], 0x0720         ; space
+            mov word[es:bx], 0x074F
 
             ; Check collision with paddle
             cmp bx, [PaddleL]
@@ -559,8 +596,13 @@ MoveBalls1RowDown:
             cmp bx, [PaddleR]
             je near BallHitPaddle
 
-            mov word[es:di], 0x0720         ; space
-            mov word[es:bx], 0x074F
+            xor dx, dx
+            mov ax, di
+            mov cx, 160
+            div cx
+            cmp ax, 23
+            je near BallHitEnd
+
             add di, 2
             jmp Checker1
 
@@ -586,16 +628,24 @@ MoveBalls1RowDown:
                 mov bx, di
                 add bx, 160
 
-                ; Check collision with paddle
-                cmp bx, [PaddleL]
-                je BallHitPaddle
-                cmp bx, [PaddleM]
-                je BallHitPaddle
-                cmp bx, [PaddleR]
-                je BallHitPaddle
-
                 mov word[es:di], 0x0720         ; space
                 mov word[es:bx], 0x074F
+
+                ; Check collision with paddle
+                cmp bx, [PaddleL]
+                je near BallHitPaddle
+                cmp bx, [PaddleM]
+                je near BallHitPaddle
+                cmp bx, [PaddleR]
+                je near BallHitPaddle
+
+                xor dx, dx
+                mov ax, di
+                mov cx, 160
+                div cx
+                cmp ax, 23
+                je near BallHitEnd
+
                 add di, 2
                 jmp InnerChecker2
 
@@ -621,16 +671,23 @@ MoveBalls1RowDown:
                 mov bx, di
                 add bx, 160
 
-                ; Check collision with paddle
-                cmp bx, [PaddleL]
-                je BallHitPaddle
-                cmp bx, [PaddleM]
-                je BallHitPaddle
-                cmp bx, [PaddleR]
-                je BallHitPaddle
-
                 mov word[es:di], 0x0720         ; space
                 mov word[es:bx], 0x074F
+
+                ; Check collision with paddle
+                cmp bx, [PaddleL]
+                je near BallHitPaddle
+                cmp bx, [PaddleM]
+                je near BallHitPaddle
+                cmp bx, [PaddleR]
+                je near BallHitPaddle
+
+                xor dx, dx
+                mov ax, di
+                mov cx, 160
+                div cx
+                cmp ax, 23
+                je near BallHitEnd
 
                 add di, 2
                 jmp InnerChecker3
@@ -645,14 +702,16 @@ MoveBalls1RowDown:
         ret
 
 BallHitPaddle:
-    ; Here we handle "loss".
-    ; For now, you said: show winning screen to test.
-
-    ; Optional: clear bullets / balls etc.
     call ClearAllBullets
-
     call PrintScore
-    jmp ShowWinning
+
+    jmp ShowLosing
+
+BallHitEnd:
+    call ClearAllBullets
+    call PrintScore
+
+    jmp ShowLosing
 
 start:
 
@@ -762,7 +821,7 @@ start:
 
         Continue:
 
-            mov cx, 0xFFFF
+            mov cx, 0xAAAA
             delay_loop:
                 loop delay_loop
 
@@ -866,6 +925,22 @@ start:
             je Exit
 
             jmp WaitForRestart
+
+    ShowLosing:
+        call ClearAllBullets
+        call ShowLosingMessage
+        call PrintScore
+
+        WaitForRestart2:
+            mov ah, 0
+            int 0x16
+            cmp al, 13
+            je start
+
+            cmp al, 27
+            je Exit
+
+            jmp WaitForRestart2
 
     Exit:
         mov ax, 0x4c00
