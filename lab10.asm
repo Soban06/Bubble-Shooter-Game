@@ -10,6 +10,12 @@ stack:        times 32*256 dw 0       ; space for 32 512 byte stacks
 nextpcb:      dw   1                  ; index of next free pcb 
 current:      dw   0                  ; index of current pcb 
 
+BallFallCounter: dw 0
+
+BallRow1Base: dw 204
+BallRow2Base: dw 364
+BallRow3Base: dw 524
+
 PaddleL: dw 3758
 PaddleM: dw 3760
 PaddleR: dw 3762
@@ -515,16 +521,155 @@ ClearAllBullets:
         pop bp
         ret
 
+MoveBalls1RowDown:
+    ; let's start from the third row
+    push bp
+    mov bp, sp
+
+    xor ax, ax
+    mov ax, 0xb800
+    mov es, ax
+
+    mov di, [BallRow3Base]
+    mov si, di
+    add si, 74
+
+    Checker1:
+
+        cmp di, si
+        jge Checker2
+
+        mov ax, [es:di]
+        cmp al, 'O'
+        je MoveBallDown
+
+        add di, 2
+        jmp Checker1
+
+        MoveBallDown:
+
+            mov bx, di
+            add bx, 160
+
+            ; Check collision with paddle
+            cmp bx, [PaddleL]
+            je near BallHitPaddle
+            cmp bx, [PaddleM]
+            je near BallHitPaddle
+            cmp bx, [PaddleR]
+            je near BallHitPaddle
+
+            mov word[es:di], 0x0720         ; space
+            mov word[es:bx], 0x074F
+            add di, 2
+            jmp Checker1
+
+    Checker2:
+        ; second row
+        mov di, [BallRow2Base]
+        mov si, di
+        add si, 74
+
+        InnerChecker2:
+
+            cmp di, si     ;   again 400 = random
+            jge Checker3
+
+            mov ax, [es:di]
+            cmp al, 'O'
+            je MoveBallDown1
+
+            add di, 2
+            jmp InnerChecker2
+
+            MoveBallDown1:
+                mov bx, di
+                add bx, 160
+
+                ; Check collision with paddle
+                cmp bx, [PaddleL]
+                je BallHitPaddle
+                cmp bx, [PaddleM]
+                je BallHitPaddle
+                cmp bx, [PaddleR]
+                je BallHitPaddle
+
+                mov word[es:di], 0x0720         ; space
+                mov word[es:bx], 0x074F
+                add di, 2
+                jmp InnerChecker2
+
+    Checker3:
+
+        mov di, [BallRow1Base]
+        mov si, di
+        add si, 74
+
+        InnerChecker3:
+
+            cmp di, si     ;   again 400 = random
+            jge done5
+
+            mov ax, [es:di]
+            cmp al, 'O'
+            je MoveBallDown2
+
+            add di, 2
+            jmp InnerChecker3
+
+            MoveBallDown2:
+                mov bx, di
+                add bx, 160
+
+                ; Check collision with paddle
+                cmp bx, [PaddleL]
+                je BallHitPaddle
+                cmp bx, [PaddleM]
+                je BallHitPaddle
+                cmp bx, [PaddleR]
+                je BallHitPaddle
+
+                mov word[es:di], 0x0720         ; space
+                mov word[es:bx], 0x074F
+
+                add di, 2
+                jmp InnerChecker3
+
+
+    done5:
+        add word [BallRow1Base], 160
+        add word [BallRow2Base], 160
+        add word [BallRow3Base], 160
+
+        pop bp
+        ret
+
+BallHitPaddle:
+    ; Here we handle "loss".
+    ; For now, you said: show winning screen to test.
+
+    ; Optional: clear bullets / balls etc.
+    call ClearAllBullets
+
+    call PrintScore
+    jmp ShowWinning
+
 start:
 
     mov ax, 0xb800
     mov es, ax
 
-    mov word[PaddleL], 3758
-    mov word[PaddleM], 3760
-    mov word[PaddleR], 3762
+    mov word [PaddleL], 3758
+    mov word [PaddleM], 3760
+    mov word [PaddleR], 3762
 
-    mov byte[Score], 0
+    mov word [BallRow1Base], 204
+    mov word [BallRow2Base], 364
+    mov word [BallRow3Base], 524
+
+    mov word [BallFallCounter], 0
+    mov word [CurrentBallsCounter], 0
+    mov byte [Score], 0
 
     call ClearScreen
     call SetupUI
@@ -534,6 +679,21 @@ start:
     GameLoop:
 
         call PrintScore
+
+        inc word [BallFallCounter]
+        cmp word [BallFallCounter], 50
+        jb SkipFall
+
+        mov word [BallFallCounter], 0
+        call MoveBalls1RowDown
+
+    SkipFall:
+        mov dx, [CurrentBallsCounter]
+        cmp dx, 0
+        je near ShowWinning
+        
+        push cx
+        mov cx, 0x1FFF
 
         mov cx, [MaxBullets]
         mov bx, 0
@@ -696,15 +856,16 @@ start:
         call ShowWinningMessage
         call PrintScore
 
-        mov ah, 0
-        int 0x16
-        cmp al, 13
-        je start
+        WaitForRestart:
+            mov ah, 0
+            int 0x16
+            cmp al, 13
+            je start
 
-        cmp al, 27
-        je Exit
+            cmp al, 27
+            je Exit
 
-        jmp ShowWinning
+            jmp WaitForRestart
 
     Exit:
         mov ax, 0x4c00
