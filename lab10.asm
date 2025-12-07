@@ -12,6 +12,10 @@ current:      dw   0                  ; index of current pcb
 
 BallFallCounter: dw 0
 
+welcomeTo: db 'WELCOME TO', 0
+pongText: db 'KNOX', 0
+pressEnterToContinueText: db 'PRESS [ENTER] TO CONTINUE', 0
+
 BallRow1Base: dw 204
 BallRow2Base: dw 364
 BallRow3Base: dw 524
@@ -31,9 +35,46 @@ PressEnterToRestartText: db 'Press [Enter] To Restart!', 0
 Score: db 0
 ScoreText: db 'Score: ', 0
 
-MaxBallCounter: dw 60
+MaxBallCounter: dw 10
 CurrentBallsCounter: dw 0
 
+PrintSideArrows:
+    push bp
+    mov bp, sp
+
+    mov ah, 0x03
+    mov al, 'X'
+
+    mov cx, 80
+    
+    xor di, di
+
+    rep stosw
+
+    mov cx, 23
+    leftColumn2:
+        jcxz bottom2
+        mov [es:di], ax
+        add di, 160
+        dec cx
+        jmp leftColumn2
+
+    bottom2:
+        mov cx, 79
+        rep stosw
+
+    mov cx, 25
+    rightColumn2:
+        jcxz done8
+        mov [es:di], ax
+        sub di, 160
+        dec cx
+        jmp rightColumn2
+
+
+    done8:
+        pop bp
+        ret
 
 timer:
 
@@ -146,6 +187,59 @@ initpcb:
         pop  ax 
         pop  bp 
         ret  6
+
+
+PrintWelcomeScreen:
+    push bp
+    mov bp, sp
+
+    call PrintSideArrows
+
+    mov ah, 0x03
+
+    mov di, 1346
+    mov si, welcomeTo
+
+
+    mov cx, 10
+    PrintWelcomeTo:
+        lodsb
+        stosw
+        dec cx
+        jcxz PONG
+        jmp PrintWelcomeTo
+
+    PONG:
+
+        mov di, 1672
+        mov si, pongText
+
+        mov cx, 4
+
+        printPong:
+            lodsb
+            stosw
+            dec cx
+            jcxz pressEnter
+            jmp printPong
+
+
+    pressEnter:
+        mov di, 2292
+        mov si, pressEnterToContinueText
+
+        mov cx, 25
+        mov ah, 0x03
+        printEnterToCont:
+            lodsb
+            stosw
+            dec cx
+            jcxz done7
+            jmp printEnterToCont
+
+    done7:
+        pop bp
+        ret
 
 
 PrintScore:
@@ -717,6 +811,17 @@ start:
 
     mov ax, 0xb800
     mov es, ax
+
+    call ClearScreen
+
+    call PrintWelcomeScreen
+
+    WaitForEnter:
+        mov ah, 0
+        int 0x16
+
+        cmp al, 13
+        jne WaitForEnter
 
     mov word [PaddleL], 3758
     mov word [PaddleM], 3760
