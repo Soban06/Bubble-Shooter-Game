@@ -35,7 +35,7 @@ PressEnterToRestartText: db 'Press [Enter] To Restart!', 0
 Score: db 0
 ScoreText: db 'Score: ', 0
 
-MaxBallCounter: dw 10
+MaxBallCounter: dw 20
 CurrentBallsCounter: dw 0
 
 PrintSideArrows:
@@ -564,7 +564,7 @@ ShowPressEnterToRestart:
     mov ah, 0x07
 
     mov si, PressEnterToRestartText
-    mov di, 2134
+    mov di, 2136
     l2:
         lodsb
         cmp al, 0
@@ -607,7 +607,7 @@ ShowLosingMessage:
     mov ah, 0x0C
 
     mov si, YouLostTheGameText
-    mov di, 1814
+    mov di, 1816
     l4:
         lodsb
         cmp al, 0
